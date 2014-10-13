@@ -84,9 +84,6 @@ def main():
         else:
             return 'present'
 
-#    if status() == 'present':
-#        module.exit_json(changed=False, name=name, state=state)
-
     def _mkdir(dir, mode):
         if not os.path.isdir(dir):
             try:
@@ -120,11 +117,6 @@ def main():
             return
 
     def create_resources(svc_name, script):
-# TODO convert to these "simpler" loops
-##@#        for source in links.keys():
-##@#            _symlink(source, links[source])
-##@#        for dir in dirs.keys():
-##@#            _mkdir(dir, dirs[dir])
         _mkdir('/etc/sv/' + svc_name, 0755)
         _symlink(script, '/etc/sv/' + svc_name + '/run' )
         _mkdir('/etc/sv/' + svc_name + '/supervise', 0700)
@@ -138,29 +130,11 @@ def main():
 
         return True
 
-# TODO: Add method to check if this module will change anything
-##@#    links = {
-##@#        script: '/etc/sv/' + svc_name + '/run' ,
-##@#        '/etc/sv/' + svc_name: runit_root + '/service/' + svc_name,
-##@#        SV: runit_root + '/init.d/' + svc_name,
-##@#    }
-##@#    dirs = {
-##@#        '/etc/sv/' + svc_name: '0755',
-##@#        '/etc/sv/' + svc_name + '/supervise': '0700',
-##@#        '/etc/sv/' + svc_name + '/log': '0755',
-##@#        '/etc/sv/' + svc_name + '/log/main': '0755',
-##@#        '/etc/sv/' + svc_name + '/log/supervise': '0700',
-##@#        if defined log_dir:
-##@#    }
-##@#        if log_dir:
-##@#            dirs[log_dir] = '0755',
-##@#            dirs[log_dir + '/main'] = '0755',
-##@#            dirs[log_dir + '/supervise'] = '0700',
-
     create_resources(name, run_script)
     module.exit_json(changed=Changed)
     
 
+# TODO: Add method to check if this module will change anything
 # import module snippets
 from ansible.module_utils.basic import *
 

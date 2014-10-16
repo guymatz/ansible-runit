@@ -18,11 +18,36 @@ options:
       - The state of service
     required: false
     default: present
-    choices: [ "present", "absent" ]
+    choices: [ "present", "enabled", absent" ]
   run_script:
     description:
       - Script for runit to . . . run
     required: true
+    default: null
+  finish_script:
+    description:
+      - Script for runit to use as a finish script
+    required: false
+    default: null
+  log_script:
+    description:
+      - Script for runit to use as a log script
+    required: false
+    default: null
+  log_dir:
+    description:
+      - Location of log directory
+    required: false
+    default: null
+  owner:
+    description:
+      - Owner of process to be managed by runit
+    required: false
+    default: null
+  group:
+    description:
+      - Group of process to be managed by runit
+    required: false
     default: null
 requirements: [ ]
 version_added: 1.6
@@ -30,18 +55,7 @@ version_added: 1.6
 
 EXAMPLES = '''
 # Manage the creation/removal of a custom service
-- name: Configure runit for root-owned process
-  runit_svc: name=jtown
-             run_script=/opt/jtown/bin/start.sh
-
-# Manage a "user-owned" service
-- name: Configure runit for app processes
-  runit_svc: name=scab-proc
-             runit_root=/home/scab
-             owner=scab
-             group=scab
-             run_script=/home/scab/bin/start.sh
-             log_dir=/home/scab/log
+- runit: name=medistrano-web state=present run_script='/mnt/medistrano/current/medistrano-web'
 '''
 
 import os
@@ -52,9 +66,10 @@ def main():
     module = AnsibleModule(
         argument_spec = dict(
             name=dict(required=True, default=None),
-            state=dict(required=False, choices=['present', 'absent', ], default='present'),
+            state=dict(required=False, choices=['present', 'enabled', 'absent'], default='present'),
             run_script=dict(required=True),
-            runit_root=dict(required=False, default='/etc'),
+            finish_script=dict(required=False),
+            log_script=dict(required=False),
             log_dir=dict(required=False, default=False),
             owner=dict(required=False, default='root'),
             group=dict(required=False, default='root'),
@@ -65,14 +80,15 @@ def main():
     name = module.params['name']
     state = module.params['state']
     run_script = module.params['run_script']
-    runit_root = module.params['runit_root']
+    finish_script = module.params['finish_script']
+    log_script = module.params['log_script']
     log_dir = module.params['log_dir']
     owner = module.params['owner']
     group = module.params['group']
     #force = module.params['force']
 
     SV = module.get_bin_path('sv', True)
-    RUNSV = module.get_bin_path('sv', True)
+    RUNSV = module.get_bin_path('runsv', True)
 
     Changed = False
 
@@ -83,6 +99,9 @@ def main():
             return 'failed'
         else:
             return 'present'
+
+#    if status() == 'present':
+#        module.exit_json(changed=False, name=name, state=state)
 
     def _mkdir(dir, mode):
         if not os.path.isdir(dir):
@@ -116,25 +135,58 @@ def main():
         else:
             return
 
-    def create_resources(svc_name, script):
-        _mkdir('/etc/sv/' + svc_name, 0755)
-        _symlink(script, '/etc/sv/' + svc_name + '/run' )
-        _mkdir('/etc/sv/' + svc_name + '/supervise', 0700)
-        _symlink('/etc/sv/' + svc_name, runit_root + '/service/' + svc_name)
-        _symlink(SV, '/etc/init.d/' + svc_name)
-        if log_dir:
-            _mkdir('/etc/sv/' + svc_name + '/log', 0755)
-            _mkdir('/etc/sv/' + svc_name + '/log/main', 0755)
-            _mkdir('/etc/sv/' + svc_name + '/log/supervise', 0700)
+    def create_resources(svc_name):
+# TODO convert to these "simpler" loops
+##@#        for source in links.keys():
+##@#            _symlink(source, links[source])
+##@#        for dir in dirs.keys():
+##@#            _mkdir(dir, dirs[dir])
         
+        runit_available_dir = '/etc/sv/'
+        # This could be /service on non-FHS standard OS
+        runit_enabled_dir = '/etc/service/'
+
+        _mkdir(runit_available_dir + svc_name, 0755)
+        _mkdir(runit_available_dir + svc_name + '/supervise', 0700)
+        if run_script:
+            _symlink(run_script, runit_available_dir + svc_name + '/run' )
+        if finish_script:
+            _symlink(finish_script, runit_available_dir + svc_name + '/finish' )
+        if state == 'enabled':
+            _symlink(runit_available_dir + svc_name, runit_enabled_dir + svc_name)
+            _symlink(SV, '/etc/init.d/' + svc_name)
+        if log_dir:
+            _mkdir(runit_available_dir + svc_name + '/log', 0755)
+            _mkdir(runit_available_dir + svc_name + '/log/main', 0755)
+            _mkdir(runit_available_dir + svc_name + '/log/supervise', 0700)
+            if log_script:
+              _symlink(log_script, runit_available_dir + svc_name + '/log/run' )
 
         return True
 
-    create_resources(name, run_script)
+# TODO: Add method to check if this module will change anything
+##@#    links = {
+##@#        script: '/etc/sv/' + svc_name + '/run' ,
+##@#        runit_available_dir + svc_name: runit_enabled_dir + svc_name,
+##@#        SV: '/etc//init.d/' + svc_name,
+##@#    }
+##@#    dirs = {
+##@#        '/etc/sv/' + svc_name: '0755',
+##@#        '/etc/sv/' + svc_name + '/supervise': '0700',
+##@#        '/etc/sv/' + svc_name + '/log': '0755',
+##@#        '/etc/sv/' + svc_name + '/log/main': '0755',
+##@#        '/etc/sv/' + svc_name + '/log/supervise': '0700',
+##@#        if defined log_dir:
+##@#    }
+##@#        if log_dir:
+##@#            dirs[log_dir] = '0755',
+##@#            dirs[log_dir + '/main'] = '0755',
+##@#            dirs[log_dir + '/supervise'] = '0700',
+
+    create_resources(name)
     module.exit_json(changed=Changed)
     
 
-# TODO: Add method to check if this module will change anything
 # import module snippets
 from ansible.module_utils.basic import *
 
